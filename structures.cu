@@ -6,6 +6,10 @@
 #include "device_functions.h"
 #include <cuda_runtime.h>
 
+color_t* bitmap_pixel_at(bitmap_t * bitmap, size_t x, size_t y) {
+   return bitmap->pixels + bitmap->width * y + x;
+}
+
 void mesh_set_normals(mesh_t *mesh) {
    int i;
    
