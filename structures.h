@@ -44,6 +44,22 @@ typedef struct vertex_st {
    vec3_t color;
 } vertex_t;
 
+/*
+ struct for a polygon.
+ */
+typedef struct {
+   ivec2_t loc1;
+   ivec2_t loc2;
+   ivec2_t loc3;
+   vec3_t zValues;
+   vec3_t color1;
+   vec3_t color2;
+   vec3_t color3;
+   float det;
+   ivec2_t high;
+   ivec2_t low;
+} polygon_t;
+
 typedef struct mesh_st {
    vertex_t *vertices;
    vertex_t *d_vertices;
@@ -51,6 +67,8 @@ typedef struct mesh_st {
    ivec3_t *triangles;
    ivec3_t *d_triangles;
    int triangleCount;
+   polygon_t *d_polygons;
+   int polygonCount;
    vec3_t high;
    vec3_t low;
 } mesh_t;

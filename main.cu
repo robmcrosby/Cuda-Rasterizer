@@ -21,7 +21,7 @@ static const char *DEF_MESH = "dragon10k.m";
 static const char *DEF_IMAGE = "test.png";
 
 int render_mesh(const char *imageFile, const char *meshFile, int width, int height) {
-   mesh_t mesh = {NULL, NULL, 0, NULL, NULL, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
+   mesh_t mesh = {NULL, NULL, 0, NULL, NULL, 0, NULL, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
    vec3_t center;
    mat4_t modelMtx;
    float scale;
@@ -81,7 +81,7 @@ int render_mesh(const char *imageFile, const char *meshFile, int width, int heig
 }
 
 int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int height) {
-   mesh_t mesh = {NULL, NULL, 0, NULL, NULL, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
+   mesh_t mesh = {NULL, NULL, 0, NULL, NULL, 0, NULL, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
    size_t size;
    vec3_t center;
    mat4_t modelMtx;
@@ -89,6 +89,8 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    float depth;
    vec3_t lightDir = {-1.0, 1.0, 1.0};
    vec3_t lightColor = {0.7, 0.7, 0.7};
+   drawbuffer_t buffers;
+   bitmap_t bitmap;
    
    // load the mesh
    load_m_mesh(&mesh, meshFile);
@@ -99,12 +101,15 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    if (cudaMalloc((void **) &mesh.d_vertices, size) == cudaErrorMemoryAllocation)
       printf("error creating memory for vertices\n");
    cudaMemcpy(mesh.d_vertices, mesh.vertices, size, cudaMemcpyHostToDevice);
+   free(mesh.vertices);
    
    size = mesh.triangleCount * sizeof(ivec3_t);
    if (cudaMalloc((void **) &mesh.d_triangles, size) == cudaErrorMemoryAllocation)
       printf("error creating memory for triangles\n");
    cudaMemcpy(mesh.d_triangles, mesh.triangles, size, cudaMemcpyHostToDevice);
-    
+   free(mesh.triangles);
+   
+   // set the normals of the vertices
    mesh_set_normals_cuda(&mesh);
    
    // create the transforms and apply to mesh
@@ -120,18 +125,66 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    mat4_translate3f(&modelMtx, width/2.0, height/2.0, depth);
    mesh_translate_locations_cuda(&mesh, &modelMtx);
    
+   // light the vertices
    mesh_light_directional_cuda(&mesh, &lightDir, &lightColor);
    
-   size = mesh.vertexCount * sizeof(vertex_t);
-   cudaMemcpy(mesh.vertices, mesh.d_vertices, size, cudaMemcpyDeviceToHost);
+   // create the polygons from the triangles and vertices
+   size = mesh.triangleCount * sizeof(polygon_t);
+   if (cudaMalloc((void **) &mesh.d_polygons, size) == cudaErrorMemoryAllocation)
+      printf("error creating memory for polygons\n");
+   create_polygons_cuda(&mesh, width, height);
    
-   printf("first pos: (%f, %f, %f)\n", mesh.vertices->color.x, mesh.vertices->color.y, mesh.vertices->color.z);
-   
-   free(mesh.vertices);
+   // free the vertices and triangles
    cudaFree(mesh.d_vertices);
-   
-   free(mesh.triangles);
    cudaFree(mesh.d_triangles);
+   
+   buffers.width = width;
+   buffers.height = height;
+   
+   // create a color buffer on the device.
+   size = width * height * sizeof(color_t);
+   if (cudaMalloc((void **) &buffers.d_colorBuffer, size) == cudaErrorMemoryAllocation)
+      printf("error creating color buffer\n");
+   
+   // create a depth buffer on the device.
+   size = width * height * sizeof(float);
+   if (cudaMalloc((void **) &buffers.d_zBuffer, size) == cudaErrorMemoryAllocation)
+      printf("error creating depth buffer\n");
+   
+   // clear the buffers
+   clear_buffers_cuda(&buffers);
+   
+   // rasterize the polygons
+   rasterize_polygons_cuda(&buffers, &mesh);
+   
+   /*
+    // create the color and z buffers
+    buffers.width = width;
+    buffers.height = height;
+    buffers.colorBuffer = (color_t *) malloc(width * height * sizeof(color_t));
+    buffers.zBuffer = (float *) malloc(width * height * sizeof(float));
+    */
+   
+   // free the polygons and z buffer
+   cudaFree(mesh.d_polygons);
+   cudaFree(buffers.d_zBuffer);
+   
+   // copy the color buffer to host
+   buffers.colorBuffer = (color_t *) malloc(width * height * sizeof(color_t));
+   size = width * height * sizeof(color_t);
+   cudaMemcpy(buffers.colorBuffer, buffers.d_colorBuffer, size, cudaMemcpyDeviceToHost);
+   
+   // free the color buffer on the device
+   cudaFree(buffers.d_colorBuffer);
+   
+   // write to file
+   bitmap.width = buffers.width;
+   bitmap.height = buffers.height;
+   bitmap.pixels = buffers.colorBuffer;
+   save_png_to_file(&bitmap, imageFile);
+   
+   // free the host color buffer
+   free(buffers.colorBuffer);
    
    return 0;
 }
