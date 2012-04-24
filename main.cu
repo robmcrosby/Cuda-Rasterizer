@@ -8,7 +8,12 @@
 
 #include <stdio.h>
 #include <string.h>
+#ifdef __APPLE__
 #include <CUDA/CUDA.h>
+#endif
+#ifdef __unix__
+#include <cuda.h>
+#endif
 #include "structures.h"
 #include "mesh_loader.h"
 
