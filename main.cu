@@ -55,7 +55,10 @@ int render_mesh(const char *imageFile, const char *meshFile, int width, int heig
    mesh_light_directional(&mesh, &lightDir, &lightColor);
    
    // create the color and z buffers
-   buffers = drawbuffer_create(width, height);
+   buffers.width = width;
+   buffers.height = height;
+   buffers.colorBuffer = (color_t *) malloc(width * height * sizeof(color_t));
+   buffers.zBuffer = (float *) malloc(width * height * sizeof(float));
    
    // draw the mesh
    rasterize_mesh(&buffers, &mesh);
@@ -86,7 +89,6 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    float depth;
    vec3_t lightDir = {-1.0, 1.0, 1.0};
    vec3_t lightColor = {0.7, 0.7, 0.7};
-   float num;
    
    // load the mesh
    load_m_mesh(&mesh, meshFile);

@@ -31,7 +31,9 @@ typedef struct bitmap_st {
 
 typedef struct drawbuffer_st {
    color_t *colorBuffer;
+   color_t *d_colorBuffer;
    float *zBuffer;
+   float *d_zBuffer;
    int width;
    int height;
 } drawbuffer_t;
@@ -56,7 +58,6 @@ typedef struct mesh_st {
 color_t* bitmap_pixel_at(bitmap_t * bitmap, size_t x, size_t y);
 color_t vec3_to_color(const vec3_t *vec);
 
-drawbuffer_t drawbuffer_create(int width, int height);
 color_t* drawbuffer_get_color_at(drawbuffer_t *buffer, int x, int y);
 float* drawbuffer_get_zvalue_at(drawbuffer_t *buffer, int x, int y);
 
