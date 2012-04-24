@@ -9,6 +9,8 @@
 #ifndef CudaRasterizer_rasterizer_h
 #define CudaRasterizer_rasterizer_h
 
+#include "structures.h"
 
+void rasterize_mesh(drawbuffer_t *buffers, mesh_t *mesh);
 
 #endif

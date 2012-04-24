@@ -30,7 +30,7 @@ typedef struct bitmap_st {
 
 
 typedef struct drawbuffer_st {
-   unsigned char *colorBuffer;
+   color_t *colorBuffer;
    float *zBuffer;
    int width;
    int height;
@@ -54,6 +54,10 @@ typedef struct mesh_st {
 } mesh_t;
 
 color_t* bitmap_pixel_at(bitmap_t * bitmap, size_t x, size_t y);
+color_t vec3_to_color(const vec3_t *vec);
+
+color_t* drawbuffer_get_color_at(drawbuffer_t *buffer, int x, int y);
+float* drawbuffer_get_zvalue_at(drawbuffer_t *buffer, int x, int y);
 
 void mesh_set_normals(mesh_t *mesh);
 void mesh_set_normals_cuda(mesh_t *mesh);

@@ -10,6 +10,27 @@ color_t* bitmap_pixel_at(bitmap_t * bitmap, size_t x, size_t y) {
    return bitmap->pixels + bitmap->width * y + x;
 }
 
+color_t vec3_to_color(const vec3_t *vec) {
+   color_t color;
+   float red, green, blue;
+   red = vec->x * 255;
+   green = vec->y * 255;
+   blue = vec->z * 255;
+   
+   color.red = red < 0 ? 0 : red > 255 ? 255 : red;
+   color.green = green < 0 ? 0 : green > 255 ? 255 : green;
+   color.blue = blue < 0 ? 0 : blue > 255 ? 255 : blue;
+   return color;
+}
+
+color_t* drawbuffer_get_color_at(drawbuffer_t *buffer, int x, int y) {
+   return buffer->colorBuffer + buffer->width * y + x;
+}
+
+float* drawbuffer_get_zvalue_at(drawbuffer_t *buffer, int x, int y) {
+   return buffer->zBuffer + buffer->width * y + x;
+}
+
 void mesh_set_normals(mesh_t *mesh) {
    int i;
    
