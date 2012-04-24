@@ -23,6 +23,15 @@ color_t vec3_to_color(const vec3_t *vec) {
    return color;
 }
 
+drawbuffer_t drawbuffer_create(int width, int height) {
+   drawbuffer_t buffer;
+   buffer.width = width;
+   buffer.height = height;
+   buffer.colorBuffer = (color_t *) malloc(width * height * sizeof(color_t));
+   buffer.zBuffer = (float *) malloc(width * height * sizeof(float));
+   return buffer;
+}
+
 color_t* drawbuffer_get_color_at(drawbuffer_t *buffer, int x, int y) {
    return buffer->colorBuffer + buffer->width * y + x;
 }

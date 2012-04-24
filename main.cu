@@ -11,6 +11,8 @@
 #include <CUDA/CUDA.h>
 #include "structures.h"
 #include "mesh_loader.h"
+#include "rasterizer.h"
+#include "png_loader.h"
 
 #define SCALE_TO_SCREEN 0.8
 #define DEF_SIZE 1000
@@ -26,6 +28,8 @@ int render_mesh(const char *imageFile, const char *meshFile, int width, int heig
    float depth;
    vec3_t lightDir = {-1.0, 1.0, 1.0};
    vec3_t lightColor = {0.7, 0.7, 0.7};
+   drawbuffer_t buffers;
+   bitmap_t bitmap;
    
    // load the mesh
    load_m_mesh(&mesh, meshFile);
@@ -50,10 +54,25 @@ int render_mesh(const char *imageFile, const char *meshFile, int width, int heig
    // light the vertices
    mesh_light_directional(&mesh, &lightDir, &lightColor);
    
-   printf("first pos: (%f, %f, %f)\n", mesh.vertices->color.x, mesh.vertices->color.y, mesh.vertices->color.z);
+   // create the color and z buffers
+   buffers = drawbuffer_create(width, height);
+   
+   // draw the mesh
+   rasterize_mesh(&buffers, &mesh);
+   
+   //printf("first pos: (%f, %f, %f)\n", mesh.vertices->color.x, mesh.vertices->color.y, mesh.vertices->color.z);
    
    free(mesh.vertices);
    free(mesh.triangles);
+   
+   // write to file
+   bitmap.width = buffers.width;
+   bitmap.height = buffers.height;
+   bitmap.pixels = buffers.colorBuffer;
+   save_png_to_file(&bitmap, imageFile);
+   
+   free(buffers.colorBuffer);
+   free(buffers.zBuffer);
    
    return 0;
 }
