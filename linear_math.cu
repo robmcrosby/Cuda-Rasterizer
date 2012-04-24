@@ -82,8 +82,8 @@ float vec3_dot(const vec3_t *v1, const vec3_t *v2) {
 
 ivec2_t vec3_to_ivec2(const vec3_t *v) {
    ivec2_t retV;
-   retV.x = floorf(v->x);
-   retV.y = floorf(v->y);
+   retV.x = v->x;
+   retV.y = v->y;
    return retV;
 }
 
