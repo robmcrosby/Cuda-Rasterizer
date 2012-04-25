@@ -8,12 +8,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#ifdef __APPLE__
 #include <CUDA/CUDA.h>
-#endif
-#ifdef __unix__
-#include <cuda.h>
-#endif
 #include "structures.h"
 #include "mesh_loader.h"
 #include "rasterizer.h"
@@ -25,12 +20,11 @@
 static const char *DEF_MESH = "dragon10k.m";
 static const char *DEF_IMAGE = "test.png";
 
-int render_mesh(const char *imageFile, const char *meshFile, int width, int height) {
+int render_mesh(const char *imageFile, const char *meshFile, int width, int height, int duplicates) {
    mesh_t mesh = {NULL, NULL, 0, NULL, NULL, 0, NULL, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
    vec3_t center;
    mat4_t modelMtx;
    float scale;
-   float depth;
    vec3_t lightDir = {-1.0, 1.0, 1.0};
    vec3_t lightColor = {0.7, 0.7, 0.7};
    drawbuffer_t buffers;
@@ -41,19 +35,24 @@ int render_mesh(const char *imageFile, const char *meshFile, int width, int heig
    if (mesh.triangleCount == 0)
       return 1;
    
+   //printf("triangiles: %d\n", mesh.triangleCount);
+   
    mesh_set_normals(&mesh);
    
    // create the transforms and apply to mesh
    center = vec3_add(&mesh.high, &mesh.low);
    center = vec3_scale(&center, -0.5);
    scale = mesh.high.x - mesh.low.x;
-   scale = width / scale;
-   scale *= SCALE_TO_SCREEN;
-   depth = scale;
+   scale = 1 / scale;
+   //scale = width / scale;
+   //scale *= SCALE_TO_SCREEN;
+   //depth = scale;
    
    modelMtx = mat4_translation(center.x, center.y, center.z);
    mat4_scale3f(&modelMtx, scale, -scale, scale);
-   mat4_translate3f(&modelMtx, width/2.0, height/2.0, depth);
+   mat4_translate3f(&modelMtx, 0.5f, 0.5f, 1.0f);
+   //mat4_translate3f(&modelMtx, width/2.0, height/2.0, depth);
+   
    mesh_translate_locations(&mesh, &modelMtx);
    
    // light the vertices
@@ -66,7 +65,7 @@ int render_mesh(const char *imageFile, const char *meshFile, int width, int heig
    buffers.zBuffer = (float *) malloc(width * height * sizeof(float));
    
    // draw the mesh
-   rasterize_mesh(&buffers, &mesh);
+   rasterize_mesh(&buffers, &mesh, duplicates);
    
    //printf("first pos: (%f, %f, %f)\n", mesh.vertices->color.x, mesh.vertices->color.y, mesh.vertices->color.z);
    
@@ -85,13 +84,13 @@ int render_mesh(const char *imageFile, const char *meshFile, int width, int heig
    return 0;
 }
 
-int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int height) {
+int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int height, int duplicates) {
    mesh_t mesh = {NULL, NULL, 0, NULL, NULL, 0, NULL, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
    size_t size;
    vec3_t center;
    mat4_t modelMtx;
    float scale;
-   float depth;
+   //float depth;
    vec3_t lightDir = {-1.0, 1.0, 1.0};
    vec3_t lightColor = {0.7, 0.7, 0.7};
    drawbuffer_t buffers;
@@ -121,42 +120,39 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    center = vec3_add(&mesh.high, &mesh.low);
    center = vec3_scale(&center, -0.5);
    scale = mesh.high.x - mesh.low.x;
-   scale = width / scale;
-   scale *= SCALE_TO_SCREEN;
-   depth = scale;
+   scale = 1 / scale;
+   //scale *= SCALE_TO_SCREEN;
+   //depth = scale;
    
    modelMtx = mat4_translation(center.x, center.y, center.z);
    mat4_scale3f(&modelMtx, scale, -scale, scale);
-   mat4_translate3f(&modelMtx, width/2.0, height/2.0, depth);
+   mat4_translate3f(&modelMtx, 0.5f, 0.5f, 1.0);
    mesh_translate_locations_cuda(&mesh, &modelMtx);
    
    // light the vertices
    mesh_light_directional_cuda(&mesh, &lightDir, &lightColor);
    
-   // create the polygons from the triangles and vertices
-   size = mesh.triangleCount * sizeof(polygon_t);
+   // allocate the polygons
+   mesh.polygonCount = mesh.triangleCount;
+   size = mesh.polygonCount * sizeof(polygon_t);
    if (cudaMalloc((void **) &mesh.d_polygons, size) == cudaErrorMemoryAllocation)
       printf("error creating memory for polygons\n");
-   create_polygons_cuda(&mesh, width, height);
    
-   // free the vertices and triangles
-   cudaFree(mesh.d_vertices);
-   cudaFree(mesh.d_triangles);
-   
+   // create the buffers
    buffers.width = width;
    buffers.height = height;
    
-   // create a color buffer on the device.
+   // create a color buffer on the device
    size = width * height * sizeof(color_t);
    if (cudaMalloc((void **) &buffers.d_colorBuffer, size) == cudaErrorMemoryAllocation)
       printf("error creating color buffer\n");
    
-   // create a depth buffer on the device.
+   // create a depth buffer on the device
    size = width * height * sizeof(float);
    if (cudaMalloc((void **) &buffers.d_zBuffer, size) == cudaErrorMemoryAllocation)
       printf("error creating depth buffer\n");
    
-   // create a lock buffer on the device.
+   // create a lock buffer on the device
    size = width * height * sizeof(int);
    if (cudaMalloc((void **) &buffers.d_locks, size) == cudaErrorMemoryAllocation)
       printf("error creating lock buffer\n");
@@ -165,7 +161,7 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    clear_buffers_cuda(&buffers);
    
    // rasterize the polygons
-   rasterize_polygons_cuda(&buffers, &mesh);
+   rasterize_mesh_cuda(&buffers, &mesh, duplicates);
    
    /*
     // create the color and z buffers
@@ -178,6 +174,10 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    // free the polygons and z buffer
    cudaFree(mesh.d_polygons);
    cudaFree(buffers.d_zBuffer);
+   
+   // free the vertices and triangles
+   cudaFree(mesh.d_vertices);
+   cudaFree(mesh.d_triangles);
    
    // copy the color buffer to host
    buffers.colorBuffer = (color_t *) malloc(width * height * sizeof(color_t));
@@ -203,7 +203,7 @@ int main(int argc, const char * argv[])
 {
    const char *meshFile = DEF_MESH;
    const char *imageFile = DEF_IMAGE;
-   int i, width, height, useCuda = 0;
+   int i, width, height, useCuda = 0, duplicates = 1;
    
    width = height = DEF_SIZE;
    
@@ -218,11 +218,13 @@ int main(int argc, const char * argv[])
          sscanf(argv[i], "%d", &height);
       else if (strstr(argv[i], "-cuda") != NULL)
          useCuda = 1;
+      else if (strstr(argv[i], "-n") != NULL && ++i < argc)
+         sscanf(argv[i], "%d", &duplicates);
    }
    
    if (useCuda) {
-      return render_mesh_cuda(imageFile, meshFile, width, height);
+      return render_mesh_cuda(imageFile, meshFile, width, height, duplicates);
    }
-   return render_mesh(imageFile, meshFile, width, height);
+   return render_mesh(imageFile, meshFile, width, height, duplicates);
 }
 

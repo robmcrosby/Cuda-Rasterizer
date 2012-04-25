@@ -11,10 +11,9 @@
 
 #include "structures.h"
 
-void rasterize_mesh(drawbuffer_t *buffers, mesh_t *mesh);
+void rasterize_mesh(drawbuffer_t *buffers, mesh_t *mesh, int duplicates);
 
-void create_polygons_cuda(mesh_t *mesh, int width, int height);
 void clear_buffers_cuda(drawbuffer_t *buffers);
-void rasterize_polygons_cuda(drawbuffer_t *buffers, mesh_t *mesh);
+void rasterize_mesh_cuda(drawbuffer_t *buffers, mesh_t *mesh, int duplicates);
 
 #endif

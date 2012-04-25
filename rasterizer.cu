@@ -135,26 +135,27 @@ static void polygon_draw(drawbuffer_t *drawbuffer, polygon_t *polygon) {
  Takes a triangle_t pointer, a vertex_t pointer to an array, and width and height of the drawable area.
  Returns a pointer to a polygon_t or NULL if the polygon is back facing.
  */
-static polygon_t* polygon_create(ivec3_t *triangle, vertex_t *vertices, int width, int height) {
+static polygon_t* polygon_create(ivec3_t *triangle, vertex_t *vertices, int width, int height, mat4_t *mtx) {
    polygon_t *polygon;
    vertex_t *v1, *v2, *v3;
-   //vec3_t screenNorm = {0.0, 0.0, 1.0};
+   vec3_t loc1, loc2, loc3;
    
-   /*
-   // cull out any back facing faces.
-   if (vec3_dot(&triangle->normal, &screenNorm) < 0)
-      return NULL;*/
    
    // get the vertices of the triangle.
    v1 = vertices + triangle->x;
    v2 = vertices + triangle->y;
    v3 = vertices + triangle->z;
    
+   // translate the locations
+   loc1 = mat4_translate_point(mtx, &v1->location);
+   loc2 = mat4_translate_point(mtx, &v2->location);
+   loc3 = mat4_translate_point(mtx, &v3->location);
+   
    // create the polygon and add the coordinates from the triangle vertices.
    polygon = (polygon_t *)malloc(sizeof(polygon_t));
-   polygon->loc1 = vec3_to_ivec2(&v1->location);
-   polygon->loc2 = vec3_to_ivec2(&v2->location);
-   polygon->loc3 = vec3_to_ivec2(&v3->location);
+   polygon->loc1 = vec3_to_ivec2(&loc1);
+   polygon->loc2 = vec3_to_ivec2(&loc2);
+   polygon->loc3 = vec3_to_ivec2(&loc3);
    
    // find the high screen bounds.
    polygon->high.x = polygon->loc1.x > polygon->loc2.x ? polygon->loc1.x : polygon->loc2.x;
@@ -173,11 +174,11 @@ static polygon_t* polygon_create(ivec3_t *triangle, vertex_t *vertices, int widt
    polygon->low.y = polygon->low.y < 0 ? 0 : polygon->low.y;
    
    // get the color and z values from the triangle.
-   polygon->zValues.x = v1->location.z;
+   polygon->zValues.x = loc1.z;
    polygon->color1 = v1->color;
-   polygon->zValues.y = v2->location.z;
+   polygon->zValues.y = loc2.z;
    polygon->color2 = v2->color;
-   polygon->zValues.z = v3->location.z;
+   polygon->zValues.z = loc3.z;
    polygon->color3 = v3->color;
    
    polygon_set_det(polygon);
@@ -193,18 +194,29 @@ static polygon_t* polygon_create(ivec3_t *triangle, vertex_t *vertices, int widt
  Takes a triangle_t pointer, a vertex_t pointer to an array, and width and height of the drawable area.
  Returns a pointer to a polygon_t or NULL if the polygon is back facing.
  */
-void rasterize_mesh(drawbuffer_t *buffers, mesh_t *mesh) {
+void rasterize_mesh(drawbuffer_t *buffers, mesh_t *mesh, int duplicates) {
+   mat4_t mtxScale, mtx;
+   float scale;
+   int subDivs = ceil(sqrtf(duplicates));
    
-   for (int i = 0; i < mesh->triangleCount; ++i) {
-      ivec3_t *triangle = mesh->triangles + i;
-      polygon_t *polygon = polygon_create(triangle, mesh->vertices, buffers->width, buffers->height);
+   scale = buffers->width < buffers->height ? buffers->width : buffers->height;
+   scale /= subDivs;
+   mtxScale = mat4_scaled(scale, scale, 1.0f);
+   
+   for (int i = 0; i < duplicates; ++i) {
+      mtx = mtxScale;
+      mat4_translate3f(&mtx, scale * (i/subDivs), scale * (i%subDivs), 0.0f);
       
-      // draw the polygons.
-      if (polygon != NULL) {
-         polygon_draw(buffers, polygon);
+      for (int j = 0; j < mesh->triangleCount; ++j) {
+         ivec3_t *triangle = mesh->triangles + j;
+         polygon_t *polygon = polygon_create(triangle, mesh->vertices, buffers->width, buffers->height, &mtx);
+         
+         // draw the polygons.
+         if (polygon != NULL) {
+            polygon_draw(buffers, polygon);
+         }
+         free(polygon);
       }
-      
-      free(polygon);
    }
 }
 
@@ -219,10 +231,24 @@ void rasterize_mesh(drawbuffer_t *buffers, mesh_t *mesh) {
  ----------------------------------------------------------------------------
 */
 
-__global__ void cuda_create_polygons(polygon_t *polygons, vertex_t *vertices, ivec3_t *triangles, int polyCount, int width, int height) {
+__device__ void cuda_mat4_translate_point_r(mat4_t *m, vec3_t *pt) {
+   vec3_t newpt;
+   float w;
+   newpt.x = pt->x * m->x.x + pt->y * m->y.x + pt->z * m->z.x + m->w.x;
+   newpt.y = pt->x * m->x.y + pt->y * m->y.y + pt->z * m->z.y + m->w.y;
+   newpt.z = pt->x * m->x.z + pt->y * m->y.z + pt->z * m->z.z + m->w.z;
+   w = pt->x * m->x.w + pt->y * m->y.w + pt->z * m->z.w + m->w.w;
+   
+   pt->x = newpt.x / w;
+   pt->y = newpt.y / w;
+   pt->z = newpt.z / w;
+}
+
+__global__ void cuda_create_polygons(polygon_t *polygons, vertex_t *vertices, ivec3_t *triangles, int polyCount, int width, int height, mat4_t *mtx) {
    int i = blockIdx.x * blockDim.x + threadIdx.x;
    vertex_t *v1, *v2, *v3;
    ivec3_t *tri;
+   vec3_t loc1, loc2, loc3;
    polygon_t polygon, *polyRef;
    
    if (i < polyCount) {
@@ -232,13 +258,21 @@ __global__ void cuda_create_polygons(polygon_t *polygons, vertex_t *vertices, iv
       v3 = vertices + tri->z;
       polyRef = polygons + i;
       
+      loc1 = v1->location;
+      loc2 = v2->location;
+      loc3 = v3->location;
+      
+      cuda_mat4_translate_point_r(mtx, &loc1);
+      cuda_mat4_translate_point_r(mtx, &loc2);
+      cuda_mat4_translate_point_r(mtx, &loc3);
+      
       // locations
-      polygon.loc1.x = v1->location.x;
-      polygon.loc1.y = v1->location.y;
-      polygon.loc2.x = v2->location.x;
-      polygon.loc2.y = v2->location.y;
-      polygon.loc3.x = v3->location.x;
-      polygon.loc3.y = v3->location.y;
+      polygon.loc1.x = loc1.x;
+      polygon.loc1.y = loc1.y;
+      polygon.loc2.x = loc2.x;
+      polygon.loc2.y = loc2.y;
+      polygon.loc3.x = loc3.x;
+      polygon.loc3.y = loc3.y;
       
       // find the high screen bounds.
       polygon.high.x = polygon.loc1.x > polygon.loc2.x ? polygon.loc1.x : polygon.loc2.x;
@@ -257,9 +291,9 @@ __global__ void cuda_create_polygons(polygon_t *polygons, vertex_t *vertices, iv
       polygon.low.y = polygon.low.y < 0 ? 0 : polygon.low.y;
       
       // get the z values
-      polygon.zValues.x = v1->location.z;
-      polygon.zValues.y = v2->location.z;
-      polygon.zValues.z = v3->location.z;
+      polygon.zValues.x = loc1.z;
+      polygon.zValues.y = loc2.z;
+      polygon.zValues.z = loc3.z;
       
       // get the colors
       polygon.color1 = v1->color;
@@ -389,13 +423,17 @@ __global__ void cuda_draw_polygons(polygon_t *polygons, int polyCount, color_t *
    }
 }
 
-void create_polygons_cuda(mesh_t *mesh, int width, int height) {
+void create_polygons_cuda(mesh_t *mesh, int width, int height, mat4_t *mtx) {
    int block_size = 16;
    int num_blocks = mesh->triangleCount / block_size + (mesh->triangleCount % block_size == 0 ? 0 : 1);
+   mat4_t *d_mtx;
    
-   cuda_create_polygons <<< num_blocks, block_size >>> (mesh->d_polygons, mesh->d_vertices, mesh->d_triangles, mesh->triangleCount, width, height);
+   cudaMalloc((void **) &d_mtx, sizeof(mat4_t));
+   cudaMemcpy(d_mtx, mtx, sizeof(mat4_t), cudaMemcpyHostToDevice);
    
-   mesh->polygonCount = mesh->triangleCount;
+   cuda_create_polygons <<< num_blocks, block_size >>> (mesh->d_polygons, mesh->d_vertices, mesh->d_triangles, mesh->triangleCount, width, height, d_mtx);
+   
+   cudaFree(d_mtx);
 }
 
 void clear_buffers_cuda(drawbuffer_t *buffers) {
@@ -405,12 +443,26 @@ void clear_buffers_cuda(drawbuffer_t *buffers) {
    cuda_clear_buffers <<< num_blocks, block_size >>> (buffers->d_colorBuffer, buffers->d_zBuffer, buffers->d_locks, buffers->width * buffers->height);
 }
 
-void rasterize_polygons_cuda(drawbuffer_t *buffers, mesh_t *mesh) {
+void rasterize_mesh_cuda(drawbuffer_t *buffers, mesh_t *mesh, int duplicates) {
+   mat4_t mtxScale, mtx;
+   float scale;
+   int subDivs = ceil(sqrtf(duplicates));
    int block_size = 16;
    int num_blocks = mesh->polygonCount / block_size + (mesh->polygonCount % block_size == 0 ? 0 : 1);
    
-   cuda_draw_polygons <<< num_blocks, block_size >>> (mesh->d_polygons, mesh->polygonCount, buffers->d_colorBuffer,
-                                                      buffers->d_zBuffer, buffers->d_locks, buffers->width, buffers->height);
+   scale = buffers->width < buffers->height ? buffers->width : buffers->height;
+   scale /= subDivs;
+   mtxScale = mat4_scaled(scale, scale, 1.0f);
+   
+   for (int i = 0; i < duplicates; ++i) {
+      mtx = mtxScale;
+      mat4_translate3f(&mtx, scale * (i/subDivs), scale * (i%subDivs), 0.0f);
+      
+      create_polygons_cuda(mesh, buffers->width, buffers->height, &mtx);
+      
+      cuda_draw_polygons <<< num_blocks, block_size >>> (mesh->d_polygons, mesh->polygonCount, buffers->d_colorBuffer,
+                                                         buffers->d_zBuffer, buffers->d_locks, buffers->width, buffers->height);
+   }
 }
 
 
