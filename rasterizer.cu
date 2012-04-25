@@ -431,13 +431,13 @@ void create_polygons_cuda(mesh_t *mesh, int width, int height, mat4_t *mtx) {
    cudaMalloc((void **) &d_mtx, sizeof(mat4_t));
    cudaMemcpy(d_mtx, mtx, sizeof(mat4_t), cudaMemcpyHostToDevice);
    
-   cuda_create_polygons <<< num_blocks, block_size >>> (mesh->d_polygons, mesh->d_vertices, mesh->d_triangles, mesh->triangleCount, width, height, d_mtx);
+   cuda_create_polygons <<< num_blocks, block_size >>> (mesh->d_polygons, mesh->d_vertices, mesh->d_triangles, mesh->polygonCount, width, height, d_mtx);
    
    cudaFree(d_mtx);
 }
 
 void clear_buffers_cuda(drawbuffer_t *buffers) {
-   int block_size = 32;
+   int block_size = 64;
    int num_blocks = (buffers->width * buffers->height) / block_size + ((buffers->width * buffers->height) % block_size == 0 ? 0 : 1);
    
    cuda_clear_buffers <<< num_blocks, block_size >>> (buffers->d_colorBuffer, buffers->d_zBuffer, buffers->d_locks, buffers->width * buffers->height);

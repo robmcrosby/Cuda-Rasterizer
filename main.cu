@@ -143,7 +143,8 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    buffers.height = height;
    
    // create a color buffer on the device
-   size = width * height * sizeof(color_t);
+   size = width * height * sizeof(int);
+   //printf("size: %d\nwidth * height: %d\nsize of color_t: %d\n", size, width * height, sizeof(color_t));
    if (cudaMalloc((void **) &buffers.d_colorBuffer, size) == cudaErrorMemoryAllocation)
       printf("error creating color buffer\n");
    
@@ -163,29 +164,10 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    // rasterize the polygons
    rasterize_mesh_cuda(&buffers, &mesh, duplicates);
    
-   /*
-    // create the color and z buffers
-    buffers.width = width;
-    buffers.height = height;
-    buffers.colorBuffer = (color_t *) malloc(width * height * sizeof(color_t));
-    buffers.zBuffer = (float *) malloc(width * height * sizeof(float));
-    */
-   
-   // free the polygons and z buffer
-   cudaFree(mesh.d_polygons);
-   cudaFree(buffers.d_zBuffer);
-   
-   // free the vertices and triangles
-   cudaFree(mesh.d_vertices);
-   cudaFree(mesh.d_triangles);
-   
    // copy the color buffer to host
-   buffers.colorBuffer = (color_t *) malloc(width * height * sizeof(color_t));
-   size = width * height * sizeof(color_t);
+   size = width * height * sizeof(int);
+   buffers.colorBuffer = (color_t *) malloc(size);
    cudaMemcpy(buffers.colorBuffer, buffers.d_colorBuffer, size, cudaMemcpyDeviceToHost);
-   
-   // free the color buffer on the device
-   cudaFree(buffers.d_colorBuffer);
    
    // write to file
    bitmap.width = buffers.width;
@@ -195,6 +177,17 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    
    // free the host color buffer
    free(buffers.colorBuffer);
+   
+   // free the color buffer on the device
+   cudaFree(buffers.d_colorBuffer);
+   
+   // free the polygons and z buffer
+   cudaFree(mesh.d_polygons);
+   cudaFree(buffers.d_zBuffer);
+   
+   // free the vertices and triangles
+   cudaFree(mesh.d_vertices);
+   cudaFree(mesh.d_triangles);
    
    return 0;
 }
