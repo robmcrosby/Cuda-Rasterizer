@@ -279,16 +279,19 @@ __global__ void cuda_create_polygons(polygon_t *polygons, vertex_t *vertices, iv
    }
 }
 
-__global__ void cuda_clear_buffers(color_t *colorBuffer, float *zBuffer, int numPixels) {
+__global__ void cuda_clear_buffers(color_t *colorBuffer, float *zBuffer, int *locks, int numPixels) {
    int i = blockIdx.x * blockDim.x + threadIdx.x;
    color_t *color, clearColor = {0, 0, 0};
    float *zVal, zClear = FLT_MIN;
+   int *lock;
    
    if (i < numPixels) {
       color = colorBuffer + i;
       *color = clearColor;
       zVal = zBuffer + i;
       *zVal = zClear;
+      lock = locks + i;
+      *lock = 0;
    }
 }
 
@@ -322,29 +325,22 @@ __device__ vec3_t cuda_get_barycentric(polygon_t *poly, int x, int y) {
    return coords;
 }
 
-__device__ void cuda_attomic_set_color(color_t *pixel, color_t *newColor, float *zBuffVal, float new_zVal) {
-   float new_old, ret;
+__device__ void cuda_attomic_set_color(color_t *pixel, color_t *newColor, float *zBuffVal, float new_zVal, int *lock) {
+   int lockVal = 0;
    
-   if (new_zVal == 0.0f) {
-      new_zVal += 0.0001f;
-   }
+   while (lockVal = atomicExch(lock, lockVal));
    
-   ret = atomicExch(zBuffVal, 0.0f);
-   if (ret != 0.0f && ret < new_zVal) {
-      new_old = new_zVal;
+   if (*zBuffVal < new_zVal) {
+      *zBuffVal = new_zVal;
       pixel->red = newColor->red;
       pixel->green = newColor->green;
       pixel->blue = newColor->blue;
    }
-   else
-      new_old = ret;
    
-   while (atomicExch(zBuffVal, new_old) != 0.0f) {
-      new_old = atomicExch(zBuffVal, 0.0f);
-   }
+   atomicExch(lock, lockVal);
 }
 
-__device__ void cuda_draw_polygon_pixel(color_t *pixel, float *zBuffVal, polygon_t *polygon, int x, int y) {
+__device__ void cuda_draw_polygon_pixel(color_t *pixel, float *zBuffVal, int *lock, polygon_t *polygon, int x, int y) {
    vec3_t bary;
    float zVal;
    color_t newColor;
@@ -355,7 +351,7 @@ __device__ void cuda_draw_polygon_pixel(color_t *pixel, float *zBuffVal, polygon
       newColor.red = (bary.x * polygon->color1.x + bary.y * polygon->color2.x + bary.z * polygon->color3.x) * 255;
       newColor.green = (bary.x * polygon->color1.y + bary.y * polygon->color2.y + bary.z * polygon->color3.y) * 255;
       newColor.blue = (bary.x * polygon->color1.z + bary.y * polygon->color2.z + bary.z * polygon->color3.z) * 255;
-      cuda_attomic_set_color(pixel, &newColor, zBuffVal, zVal);
+      cuda_attomic_set_color(pixel, &newColor, zBuffVal, zVal, lock);
    }
 }
 
@@ -367,12 +363,17 @@ __device__ float* cuda_get_zvalue_at(float *zBuffer, int width, int x, int y) {
    return zBuffer + width*y + x;
 }
 
-__global__ void cuda_draw_polygons(polygon_t *polygons, int polyCount, color_t *colorBuffer, float *zBuffer, int width, int height) {
+__device__ int* cuda_get_lock_at(int *locks, int width, int x, int y) {
+   return locks + width*y + x;
+}
+
+__global__ void cuda_draw_polygons(polygon_t *polygons, int polyCount, color_t *colorBuffer, float *zBuffer, int *locks, int width, int height) {
    int i = blockIdx.x * blockDim.x + threadIdx.x;
    int j, k;
    polygon_t *polygon;
    color_t *pixel;
    float *zVal;
+   int *lock;
    
    if (i < polyCount) {
       polygon = polygons + i;
@@ -381,7 +382,8 @@ __global__ void cuda_draw_polygons(polygon_t *polygons, int polyCount, color_t *
          for (k = polygon->low.y; k < polygon->high.y; ++k) {
             pixel = cuda_get_color_at(colorBuffer, width, j, k);
             zVal = cuda_get_zvalue_at(zBuffer, width, j, k);
-            cuda_draw_polygon_pixel(pixel, zVal, polygon, j, k);
+            lock = cuda_get_lock_at(locks, width, j, k);
+            cuda_draw_polygon_pixel(pixel, zVal, lock, polygon, j, k);
          }
       }
    }
@@ -400,7 +402,7 @@ void clear_buffers_cuda(drawbuffer_t *buffers) {
    int block_size = 32;
    int num_blocks = (buffers->width * buffers->height) / block_size + ((buffers->width * buffers->height) % block_size == 0 ? 0 : 1);
    
-   cuda_clear_buffers <<< num_blocks, block_size >>> (buffers->d_colorBuffer, buffers->d_zBuffer, buffers->width * buffers->height);
+   cuda_clear_buffers <<< num_blocks, block_size >>> (buffers->d_colorBuffer, buffers->d_zBuffer, buffers->d_locks, buffers->width * buffers->height);
 }
 
 void rasterize_polygons_cuda(drawbuffer_t *buffers, mesh_t *mesh) {
@@ -408,7 +410,7 @@ void rasterize_polygons_cuda(drawbuffer_t *buffers, mesh_t *mesh) {
    int num_blocks = mesh->polygonCount / block_size + (mesh->polygonCount % block_size == 0 ? 0 : 1);
    
    cuda_draw_polygons <<< num_blocks, block_size >>> (mesh->d_polygons, mesh->polygonCount, buffers->d_colorBuffer,
-                                                      buffers->d_zBuffer, buffers->width, buffers->height);
+                                                      buffers->d_zBuffer, buffers->d_locks, buffers->width, buffers->height);
 }
 
 

@@ -34,6 +34,7 @@ typedef struct drawbuffer_st {
    color_t *d_colorBuffer;
    float *zBuffer;
    float *d_zBuffer;
+   int *d_locks;
    int width;
    int height;
 } drawbuffer_t;

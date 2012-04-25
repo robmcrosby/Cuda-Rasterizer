@@ -151,6 +151,11 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    if (cudaMalloc((void **) &buffers.d_zBuffer, size) == cudaErrorMemoryAllocation)
       printf("error creating depth buffer\n");
    
+   // create a lock buffer on the device.
+   size = width * height * sizeof(int);
+   if (cudaMalloc((void **) &buffers.d_locks, size) == cudaErrorMemoryAllocation)
+      printf("error creating lock buffer\n");
+   
    // clear the buffers
    clear_buffers_cuda(&buffers);
    
