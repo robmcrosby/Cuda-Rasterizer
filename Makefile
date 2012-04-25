@@ -3,7 +3,7 @@
 # Instructor: Prof. Lupo, Prof. Wood
 
 CC = nvcc
-CFLAGS = 
+CFLAGS =
 LD = nvcc
 LDFLAGS = -lm -lpng
 OBJECTS = main.o linear_math.o mesh_loader.o png_loader.o rasterizer.o structures.o
@@ -19,10 +19,13 @@ rasterizer: $(OBJECTS)
 cpu: all
 	./rasterizer
 
+gprof: $(OBJECTS)
+	$(LD) $(LDFLAGS) $(OBJECTS) -o rasterizer -pg
+
 gpu: all
 	./rasterizer -cuda
 
 clean:
 	rm -f *.o
 	rm -f rasterizer
-	rm -f test.png
+	rm -f test.png *.out
