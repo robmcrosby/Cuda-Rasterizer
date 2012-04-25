@@ -18,11 +18,16 @@ user  0m1.954s
 sys   0m0.020s
 
 GPU Time 25 Bunnies:
+real  0m1.906s
+user  0m0.557s
+sys   0m0.076s
 
 
 
+//////////////////////////////////////////////////////// gprof outputs ///////////////////////////////////////////////////////////////////////////
 
-======================================== CPU Profiling Data 1 Bunny (1.48s ; 1.45s w/o file I/O) =====================================================
+
+======================================== CPU Profiling Data 1 Bunny (1.48s ; 1.45s w/o file I/O) =================================================
 
 Each sample counts as 0.01 seconds.
   %   cumulative   self              self     total           
@@ -64,5 +69,12 @@ Each sample counts as 0.01 seconds.
 
 
 
-======================================== GPU Profiling Data 25 Bunnies (1.02s ; .94s w/o file I/O) ==============================================
+======================================== GPU Profiling Data 25 Bunnies () ==============================================
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls  Ts/call  Ts/call  name    
+ 66.69      0.04     0.04                             save_png_to_file(bitmap_st*, char const*)
+ 33.35      0.06     0.02                             bitmap_pixel_at(bitmap_st*, unsigned long, unsigned long)
+
 
