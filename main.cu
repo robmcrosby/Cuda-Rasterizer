@@ -22,7 +22,7 @@
 #define SCALE_TO_SCREEN 0.8
 #define DEF_SIZE 1000
 
-static const char *DEF_MESH = "dragon10k.m";
+static const char *DEF_MESH = "monkey_high.m";
 static const char *DEF_IMAGE = "test.png";
 
 int render_mesh(const char *imageFile, const char *meshFile, int width, int height, int duplicates) {
