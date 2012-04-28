@@ -23,6 +23,14 @@ color_t vec3_to_color(const vec3_t *vec) {
    return color;
 }
 
+vec3_t color_to_vec3(const color_t *color) {
+   vec3_t v;
+   v.x = color->red / 255.0f;
+   v.y = color->green / 255.0f;
+   v.z = color->blue / 255.0f;
+   return v;
+}
+
 color_t* drawbuffer_get_color_at(drawbuffer_t *buffer, int x, int y) {
    return buffer->colorBuffer + buffer->width * y + x;
 }

@@ -17,6 +17,7 @@
 #include "structures.h"
 #include "mesh_loader.h"
 #include "rasterizer.h"
+#include "blur_filter.h"
 #include "png_loader.h"
 
 #define SCALE_TO_SCREEN 0.8
@@ -25,7 +26,7 @@
 static const char *DEF_MESH = "monkey_high.m";
 static const char *DEF_IMAGE = "test.png";
 
-int render_mesh(const char *imageFile, const char *meshFile, int width, int height, int duplicates) {
+int render_mesh(const char *imageFile, const char *meshFile, int width, int height, int duplicates, int blur_iter) {
    mesh_t mesh = {NULL, NULL, 0, NULL, NULL, 0, NULL, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
    vec3_t center;
    mat4_t modelMtx;
@@ -72,24 +73,27 @@ int render_mesh(const char *imageFile, const char *meshFile, int width, int heig
    // draw the mesh
    rasterize_mesh(&buffers, &mesh, duplicates);
    
-   //printf("first pos: (%f, %f, %f)\n", mesh.vertices->color.x, mesh.vertices->color.y, mesh.vertices->color.z);
-   
    free(mesh.vertices);
    free(mesh.triangles);
+   free(buffers.zBuffer);
    
-   // write to file
+   // create a bit map
    bitmap.width = buffers.width;
    bitmap.height = buffers.height;
    bitmap.pixels = buffers.colorBuffer;
+   
+   // blur the bit map
+   blur_bitmap(&bitmap, blur_iter);
+   
+   // write to file
    save_png_to_file(&bitmap, imageFile);
    
    free(buffers.colorBuffer);
-   free(buffers.zBuffer);
    
    return 0;
 }
 
-int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int height, int duplicates) {
+int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int height, int duplicates, int blur_iter) {
    mesh_t mesh = {NULL, NULL, 0, NULL, NULL, 0, NULL, 0, {0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}};
    size_t size;
    vec3_t center;
@@ -201,7 +205,7 @@ int main(int argc, const char * argv[])
 {
    const char *meshFile = DEF_MESH;
    const char *imageFile = DEF_IMAGE;
-   int i, width, height, useCuda = 0, duplicates = 1;
+   int i, width, height, useCuda = 0, duplicates = 1, blur = 1;
    
    width = height = DEF_SIZE;
    
@@ -218,11 +222,13 @@ int main(int argc, const char * argv[])
          useCuda = 1;
       else if (strstr(argv[i], "-n") != NULL && ++i < argc)
          sscanf(argv[i], "%d", &duplicates);
+      else if (strstr(argv[i], "-blur") != NULL && ++i < argc)
+         sscanf(argv[i], "%d", &blur);
    }
    
    if (useCuda) {
-      return render_mesh_cuda(imageFile, meshFile, width, height, duplicates);
+      return render_mesh_cuda(imageFile, meshFile, width, height, duplicates, blur);
    }
-   return render_mesh(imageFile, meshFile, width, height, duplicates);
+   return render_mesh(imageFile, meshFile, width, height, duplicates, blur);
 }
 

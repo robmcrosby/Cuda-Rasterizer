@@ -9,36 +9,36 @@
 #ifndef CudaRasterizer_linear_math_h
 #define CudaRasterizer_linear_math_h
 
-typedef struct ivec2_st {
+typedef struct {
    int x;
    int y;
 } ivec2_t;
 
-typedef struct ivec3_st {
+typedef struct {
    int x;
    int y;
    int z;
 } ivec3_t;
 
-typedef struct vec2_st {
+typedef struct {
    float x;
    float y;
 } vec2_t;
 
-typedef struct vec3_st {
+typedef struct {
    float x;
    float y;
    float z;
 } vec3_t;
 
-typedef struct vec4_st {
+typedef struct {
    float x;
    float y;
    float z;
    float w;
 } vec4_t;
 
-typedef struct mat4_st {
+typedef struct {
    vec4_t x;
    vec4_t y;
    vec4_t z;
