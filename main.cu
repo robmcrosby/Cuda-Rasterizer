@@ -178,25 +178,28 @@ int render_mesh_cuda(const char *imageFile, const char *meshFile, int width, int
    buffers.colorBuffer = (color_t *) malloc(size);
    cudaMemcpy(buffers.colorBuffer, buffers.d_colorBuffer, size, cudaMemcpyDeviceToHost);
    
-   // write to file
+   // free the buffers on the device
+   cudaFree(buffers.d_colorBuffer);
+   cudaFree(buffers.d_zBuffer);
+   
+   // free the polygons, vertices, and triangles on the device
+   cudaFree(mesh.d_polygons);
+   cudaFree(mesh.d_vertices);
+   cudaFree(mesh.d_triangles);
+   
+   // put together the bit map
    bitmap.width = buffers.width;
    bitmap.height = buffers.height;
    bitmap.pixels = buffers.colorBuffer;
+   
+   // blur the bit map
+   blur_bitmap_cuda(&bitmap, blur_iter);
+   
+   // write the bitmap to a file
    save_png_to_file(&bitmap, imageFile);
    
    // free the host color buffer
    free(buffers.colorBuffer);
-   
-   // free the color buffer on the device
-   cudaFree(buffers.d_colorBuffer);
-   
-   // free the polygons and z buffer
-   cudaFree(mesh.d_polygons);
-   cudaFree(buffers.d_zBuffer);
-   
-   // free the vertices and triangles
-   cudaFree(mesh.d_vertices);
-   cudaFree(mesh.d_triangles);
    
    return 0;
 }
