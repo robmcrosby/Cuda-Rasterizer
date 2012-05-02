@@ -5,8 +5,8 @@
 CC = nvcc
 CFLAGS =
 LD = nvcc
-LDFLAGS = -lm -lpng
-OBJECTS = main.o linear_math.o mesh_loader.o png_loader.o rasterizer.o structures.o blur_filter.o
+LDFLAGS = -lm -lpng -lrt
+OBJECTS = main.o linear_math.o mesh_loader.o png_loader.o rasterizer.o structures.o blur_filter.o hrt.o
 
 all: rasterizer
 
